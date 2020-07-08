@@ -71,9 +71,9 @@ class Rig:
 
     # Display hardware environment
     def __str__(self):
-        if self.gpu:
+        if self.gpu is not None:
             print(f'GPU {self.gpu}')
-        elif self.tpu:
+        elif self.tpu is not None:
             print(f'Running on TPU {self.tpu.master()}',
                   f'\nreplicas: {self.replicas}')
         else:
