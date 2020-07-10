@@ -1,49 +1,26 @@
 import tensorflow as tf
 from typing import Tuple, Optional, Generator, Dict, List
-from os import walk
+
 from .Stego import Stego
 
 
 class GetData(Stego):
-    def __init__(self, dir_url: Dict[str, str] = None, class_names: [List] = None, img_directory: str = './image_data'):
+    def __init__(self, dir_url: Dict[str, str] = None, class_names: [List] = None, img_directory: str = '/img_data'):
         super().__init__(dir_url, class_names, img_directory)
         self.dir_url = dir_url
-        self.class_names = self._folder_names(class_names, img_directory)
+        self.class_names = class_names
         self.img_directory = img_directory
 
-    @staticmethod
-    def _folder_names(class_names=None, img_directory=None):
-        if class_names is None:
-            try:
-                _, directories, _ = next(walk(img_directory))
-                return (None, directories)[len(directories) > 0]  # return directory names
-            except StopIteration:
-                'The attribute img_directory should be relative./"folder" or complete /.../"folder".'
-        else:
-            return class_names
-
-    def _prevent_duplicates(self) -> Dict:
-        requested_folders = set(self.dir_url)
-        folders_in_directory = self._folder_names(img_directory=self.img_directory)
-        try:
-            to_download = requested_folders.symmetric_difference(folders_in_directory)
-            print(f'Downloading: {to_download}.')
-            return {i: self.dir_url.get(i) for i in to_download}
-        except TypeError:
-            ""
-            return self.dir_url
-
-    def download_unzip(self, as_generator=False) -> None or Generator:
+    def download_unzip(self, get_all=True) -> None or Generator:
         """
         Downloads data from the dir_url of the form {category, url}.
-        Stores each folder under img_directory/category/
+        Stores each folder under input_directory/subdirectory/category/
 
         PARAMETERS:
-        :param as_generator: [default=False] Changes the behavior of the downloader. 
-         If set to false it will automatically download all the folders from  "self.dir_url"
-         and store them in folders with the keys of that directory.
+        :param get_all: [default=True] Will automatically start downloading all the files in the values of
+         "self.dir_url" to store them in folders with the keys of that directory.
 
-        :return: None, or a generator if asGenerator is set to True.
+        :return:
         """
 
         def _mk_params(dir_key, file_url):
@@ -53,20 +30,18 @@ class GetData(Stego):
                       'archive_format': 'auto', 'cache_dir': None}
             return params
 
-        to_download = self._prevent_duplicates()
-        try:
-            if not as_generator:
-                for key, url in to_download.items():
-                    f_params = _mk_params(key, url)
-                    tf.keras.utils.get_file(**f_params)
-            else:
-                return (tf.keras.utils.get_file(key, url) for key, url in self.dir_url.items() if key in to_download)
-        except TypeError:
-            print(f"All the requested folders already exist on '{self.img_directory}'")
+        to_download = self._unique_files(self.dir_url, self.img_directory, self.class_names)
+
+        if get_all:
+            for key, url in to_download.items():
+                f_params = _mk_params(key, url)
+                tf.keras.utils.get_file(**f_params)
+        else:
+            return (tf.keras.utils.get_file(key, url) for key, url in self.dir_url.items() if key in to_download)
 
     def img_batch(self, batch_size: Optional[int] = 32,
                   target_size: Optional[Tuple] = (256, 256),
-                  subset: Optional[str] = 'training', *,
+                  subset: Optional[str] = 'training',
                   validation_split: Optional[int] = 0.3,
                   class_mode: Optional[int] = 'categorical',
                   preprocessing_function=None) -> tf.keras.preprocessing.image.DirectoryIterator:
@@ -96,7 +71,7 @@ class GetData(Stego):
                           }
         img_gen = tf.keras.preprocessing.image.ImageDataGenerator(**img_gen_params)
 
-        self.class_names = self._folder_names()
+        self._deduce_class_names()
 
         img_dir_params = {'directory': self.img_directory,
                           'image_data_generator': img_gen,
